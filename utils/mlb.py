@@ -1,4 +1,3 @@
-from typing import Any
 from svglib.svglib import svg2rlg
 
 logo_url = 'https://sports-stats-api.herokuapp.com/mlb/team/logo'

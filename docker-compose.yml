@@ -1,0 +1,10 @@
+version: '3.7'
+
+services:
+  sportscord:
+    build: .
+    image: sportscord:latest
+    container_name: sportscord
+    env_file:
+      - .env
+    restart: always
