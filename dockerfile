@@ -1,4 +1,4 @@
-FROM python:3.8.8
+FROM python:3.8.8-slim
 
 COPY . .
 RUN pip install -U -r requirements.txt
