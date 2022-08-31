@@ -29,4 +29,4 @@ if __name__ == '__main__':
   pretty_print('Sportscord is getting warmed up! Loading cogs...', 'INIT')
   run(load_cogs())
 
-  bot.run(getenv('TOKEN'))
+  bot.run(getenv('INPUT_TOKEN'))
