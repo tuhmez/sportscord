@@ -28,4 +28,4 @@ jobs:
           dockerfile_directory: ./
           dockerfile_name: dockerfile
           docker_options: "--no-cache"
-          process_type: web
+          process_type: worker
