@@ -79,7 +79,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
               home_team = game['home']
               home_abbr = home_team['abbreviation']
               home_record = f'{home_team["record"]["wins"]}-{home_team["record"]["losses"]}'
-              if game_status_code != 'I' and game_status_code != 'F':
+              if game_status_code != 'I' and game_status_code != 'F'and game_status_code != 'G' and game_status_code != 'O':
                 game_time_utc = parser.isoparse(game['datetime']['dateTime'])
                 game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
                 game_time_local_tz = game_time_utc.astimezone(self.to_zone)
