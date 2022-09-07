@@ -6,7 +6,7 @@ from reportlab.graphics import renderPM
 import datetime
 from dateutil import parser, tz
 
-from utils.mlb import convert_svg_to_png, get_player_stats, logo_url, player_stats_url, probables_url, score_url, standings_url
+from utils.mlb import convert_svg_to_png, get_player_stats, game_url, logo_url, player_stats_url, probables_url, score_url, standings_url
 from utils.logger import log
 from utils.date import get_datetime
 
@@ -62,51 +62,75 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
       else:
         params['date'] = get_datetime('today', 'mm/dd/yyyy')
 
-      async with aiohttp.ClientSession() as session:
-        async with session.get(score_url, params=params) as response:
-          jdata = await response.json()
-          if len(jdata) != 0:
-            return_str: str
-            for game in jdata:
-              game_status = game['status']
-              game_status_code = game_status['codedGameState']
-              game_status_detail = game_status['detailedState']
+      exit_loop = False
 
-              linescore = game['linescore']
-              away_team = game['away']
-              away_abbr = away_team['abbreviation']
-              away_record = f'{away_team["record"]["wins"]}-{away_team["record"]["losses"]}'
-              home_team = game['home']
-              home_abbr = home_team['abbreviation']
-              home_record = f'{home_team["record"]["wins"]}-{home_team["record"]["losses"]}'
-              if game_status_code != 'I' and game_status_code != 'F'and game_status_code != 'G' and game_status_code != 'O':
-                game_time_utc = parser.isoparse(game['datetime']['dateTime'])
+      async with aiohttp.ClientSession() as session:
+        async with session.get(game_url, params=params) as game_response:
+          game_jdata = await game_response.json()
+          if game_jdata['totalGames'] != 0:
+            for game in game_jdata['games']:
+              if game['status']['detailedState'] == 'Postponed':
+                exit_loop = True
+                away_team = game['teams']['away']['team']
+                home_team = game['teams']['home']['team']
+                away_abbr = away_team['abbreviation']
+                home_abbr = home_team['abbreviation']
+                away_record = f'{game["teams"]["away"]["leagueRecord"]["wins"]}-{game["teams"]["away"]["leagueRecord"]["losses"]}'
+                home_record = f'{game["teams"]["home"]["leagueRecord"]["wins"]}-{game["teams"]["home"]["leagueRecord"]["losses"]}'
+
+                game_time_utc = parser.isoparse(game['rescheduleDate'])
                 game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
                 game_time_local_tz = game_time_utc.astimezone(self.to_zone)
-                game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%#I:%M %p")
-                return_str = f'{game_status_detail} | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time_local_tz}'
-              elif game_status_code == 'I':
-                inning_half = linescore['inningState']
-                inning = linescore['currentInningOrdinal']
-                away_score = linescore['teams']['away']['runs']
-                home_score = linescore['teams']['home']['runs']
-                return_str = f'{inning_half} {inning} | {away_abbr}: {away_score} vs. {home_abbr}: {home_score}'
-              else:
-                inning = linescore['currentInning']
-                away_score = linescore['teams']['away']['runs']
-                home_score = linescore['teams']['home']['runs']
+                game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%m/%d/%Y %#I:%M %p")
+                await ctx.send(f'Postponed ({game["status"]["reason"]}) | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | Rescheduled time: {game_time_local_tz}')
+            
+            if exit_loop == True:
+              return
+            else:
+              async with session.get(score_url, params=params) as response:
+                jdata = await response.json()
+                return_str: str
+                for game in jdata:
+                  game_status = game['status']
+                  game_status_code = game_status['codedGameState']
+                  game_status_detail = game_status['detailedState']
 
-                if home_score > away_score:
-                  home_result = f'**{home_abbr} ({home_record}): {home_score}**'
-                  away_result = f'{away_abbr} ({away_record}): {away_score}'
-                else:
-                  home_result = f'{home_abbr} ({home_record}): {home_score}'
-                  away_result = f'**{away_abbr} ({away_record}): {away_score}**'
+                  linescore = game['linescore']
+                  away_team = game['away']
+                  away_abbr = away_team['abbreviation']
+                  away_record = f'{away_team["record"]["wins"]}-{away_team["record"]["losses"]}'
+                  home_team = game['home']
+                  home_abbr = home_team['abbreviation']
+                  home_record = f'{home_team["record"]["wins"]}-{home_team["record"]["losses"]}'
+                  if game_status_code != 'I' and game_status_code != 'F'and game_status_code != 'G' and game_status_code != 'O':
+                    game_time_utc = parser.isoparse(game['datetime']['dateTime'])
+                    game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
+                    game_time_local_tz = game_time_utc.astimezone(self.to_zone)
+                    game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%#I:%M %p")
+                    game_time = game_time_local_tz if game_status['startTimeTBD'] == False else 'TBD'
+                    return_str = f'{game_status_detail} | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}'
+                  elif game_status_code == 'I':
+                    inning_half = linescore['inningState']
+                    inning = linescore['currentInningOrdinal']
+                    away_score = linescore['teams']['away']['runs']
+                    home_score = linescore['teams']['home']['runs']
+                    return_str = f'{inning_half} {inning} | {away_abbr}: {away_score} vs. {home_abbr}: {home_score}'
+                  else:
+                    inning = linescore['currentInning']
+                    away_score = linescore['teams']['away']['runs']
+                    home_score = linescore['teams']['home']['runs']
 
-                status_str = 'FINAL' if inning == 9 else f'FINAL/{inning}'
-                return_str = f'{status_str} | {away_result} vs. {home_result}'
+                    if home_score > away_score:
+                      home_result = f'**{home_abbr} ({home_record}): {home_score}**'
+                      away_result = f'{away_abbr} ({away_record}): {away_score}'
+                    else:
+                      home_result = f'{home_abbr} ({home_record}): {home_score}'
+                      away_result = f'**{away_abbr} ({away_record}): {away_score}**'
 
-              await ctx.send(return_str)
+                    status_str = 'FINAL' if inning == 9 else f'FINAL/{inning}'
+                    return_str = f'{status_str} | {away_result} vs. {home_result}'
+
+                  await ctx.send(return_str)
             log(f'Got score for {team.upper()}. - CMD (score)', True)
           else:
             today = datetime.date.today()

@@ -1,6 +1,7 @@
 from svglib.svglib import svg2rlg
 
 logo_url = 'https://sports-stats-api.herokuapp.com/mlb/team/logo'
+game_url = 'https://sports-stats-api.herokuapp.com/mlb/game'
 boxscore_url = 'https://sports-stats-api.herokuapp.com/mlb/game/boxscore'
 feed_url = 'https://sports-stats-api.herokuapp.com/mlb/game/feed'
 score_url = 'https://sports-stats-api.herokuapp.com/mlb/game/score'
