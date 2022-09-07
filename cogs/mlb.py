@@ -275,11 +275,15 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
               if away_pitcher is not None:
                 away_pitcher_name = away_jdata['people'][0]['fullName'] if away_pitcher is not None else 'TBD'
                 away_pitcher_era = current_away_pitcher_data['stat']['era']
-                away_pitcher_str = f'{away_pitcher_name} ({away_pitcher_era} ERA)'
+                away_pitcher_wins = current_away_pitcher_data['stat']['wins']
+                away_pitcher_losses = current_away_pitcher_data['stat']['losses']
+                away_pitcher_str = f'{away_pitcher_name} ({away_pitcher_wins}-{away_pitcher_losses} {away_pitcher_era} ERA)'
               if home_pitcher is not None:
                 home_pitcher_name = home_jdata['people'][0]['fullName'] if home_pitcher is not None else 'TBD'
                 home_pitcher_era = current_home_pitcher_data['stat']['era']
-                home_pitcher_str = f'{home_pitcher_name} ({home_pitcher_era} ERA)'
+                home_pitcher_wins = current_home_pitcher_data['stat']['wins']
+                home_pitcher_losses = current_home_pitcher_data['stat']['losses']
+                home_pitcher_str = f'{home_pitcher_name} ({home_pitcher_wins}-{home_pitcher_losses} {home_pitcher_era} ERA)'
 
               if len(game_jdata) != 0:
                 game_time_utc = parser.isoparse(game_jdata[i]['datetime']['dateTime'])
