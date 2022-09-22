@@ -6,11 +6,12 @@ from reportlab.graphics import renderPM
 import datetime
 from dateutil import parser, tz
 
-from utils.mlb import convert_svg_to_png, get_player_stats, game_url, logo_url, player_stats_url, probables_url, score_url, standings_url
+from urls.mlb import game_url, games_url, logo_url, player_stats_url, probables_url, score_url, standings_url
+from utils.mlb import convert_svg_to_png, get_player_stats
 from utils.logger import log
 from utils.date import get_datetime
 
-from help.mlb import magic_long_help, probables_long_help, record_long_help, score_long_help
+from help.mlb import games_long_help, magic_long_help, probables_long_help, record_long_help, score_long_help
 
 class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
   def __init__(self, bot):
@@ -133,8 +134,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
                   await ctx.send(return_str)
             log(f'Got score for {team.upper()}. - CMD (score)', True)
           else:
-            today = datetime.date.today()
-            msg = f'No games found for {team.upper()} on {today.strftime("%m/%d/%y")}!'
+            date = datetime.datetime.strptime(params['date'], 'mm/dd/yyyy')
+            msg = f'No games found for {team.upper()} on {date.strftime("%m/%d/%y")}!'
             log(f'{msg} - CMD (score)', True)
             await ctx.send(msg)
 
@@ -295,10 +296,77 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
               await ctx.send(return_str)
             log(f'Got probables for {team.upper()}. - CMD (probables)', True)
           else:
-            today = datetime.date.today()
-            msg = f'No games found for {team.upper()} on {today.strftime("%m/%d/%y")}!'
+            date = datetime.datetime.strptime(params['date'], 'mm/dd/yyyy')
+            msg = f'No games found for {team.upper()} on {date.strftime("%m/%d/%y")}!'
             log(f'{msg} - CMD (probables)', True)
             await ctx.send(msg)
+
+  @commands.command(name='games', brief='Get all games for a day', help=games_long_help)
+  async def get_games(self, ctx, date: str = None):
+    params = {
+      'date': get_datetime(date if date is not None else 'today', 'mm/dd/yyyy')
+    }
+
+    async with aiohttp.ClientSession() as session:
+      async with session.get(games_url, params=params) as game_response:
+        game_jdata = await game_response.json()
+        if game_jdata['totalGames'] != 0:
+          game_strings = []
+          for game in game_jdata['dates'][0]['games']:
+            return_str: str
+            away_team = game['teams']['away']['team']
+            home_team = game['teams']['home']['team']
+            away_abbr = away_team['abbreviation']
+            home_abbr = home_team['abbreviation']
+            away_record = f'{game["teams"]["away"]["leagueRecord"]["wins"]}-{game["teams"]["away"]["leagueRecord"]["losses"]}'
+            home_record = f'{game["teams"]["home"]["leagueRecord"]["wins"]}-{game["teams"]["home"]["leagueRecord"]["losses"]}'
+
+            game_status = game['status']
+            game_status_code = game_status['codedGameState']
+            game_status_detail = game_status['detailedState']
+
+            linescore = game['linescore']
+            if game_status_code != 'I' and game_status_code != 'F'and game_status_code != 'G' and game_status_code != 'O':
+              game_time_utc = parser.isoparse(game['gameDate'])
+              game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
+              game_time_local_tz = game_time_utc.astimezone(self.to_zone)
+              game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%#I:%M %p")
+              game_time = game_time_local_tz if game_status['startTimeTBD'] == False else 'TBD'
+              return_str = f'{game_status_detail} | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}'
+            elif game_status_code == 'I':
+              inning_half = linescore['inningState']
+              inning = linescore['currentInningOrdinal']
+              away_score = linescore['teams']['away']['runs']
+              home_score = linescore['teams']['home']['runs']
+              return_str = f'{inning_half} {inning} | {away_abbr}: {away_score} vs. {home_abbr}: {home_score}'
+            elif game_status_detail == 'Postponed':
+              game_time_utc = parser.isoparse(game['rescheduleDate'])
+              game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
+              game_time_local_tz = game_time_utc.astimezone(self.to_zone)
+              game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%m/%d/%Y %#I:%M %p")
+              return_str = f'Postponed ({game["status"]["reason"]}) | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | Rescheduled time: {game_time_local_tz}'
+            else:
+              inning = linescore['currentInning']
+              away_score = linescore['teams']['away']['runs']
+              home_score = linescore['teams']['home']['runs']
+
+              if home_score > away_score:
+                home_result = f'**{home_abbr} ({home_record}): {home_score}**'
+                away_result = f'{away_abbr} ({away_record}): {away_score}'
+              else:
+                home_result = f'{home_abbr} ({home_record}): {home_score}'
+                away_result = f'**{away_abbr} ({away_record}): {away_score}**'
+
+              status_str = 'FINAL' if inning == 9 else f'FINAL/{inning}'
+              return_str = f'{status_str} | {away_result} vs. {home_result}'
+            game_strings.append(return_str)
+          await ctx.send('\n'.join(game_strings))
+          log(f'Got games. - CMD (score)', True)
+        else:
+          date = datetime.datetime.strptime(params['date'], 'mm/dd/yyyy')
+          msg = f'No games found for {date.strftime("%m/%d/%y")}!'
+          log(f'{msg} - CMD (score)', True)
+          await ctx.send(msg)
 
 async def setup(bot):
   await bot.add_cog(MLB(bot))

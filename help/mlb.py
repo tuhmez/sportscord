@@ -62,3 +62,16 @@ Examples:
 -probables mil
 -probables bos tomorrow
 """
+
+games_long_help = """
+-games [date]
+
+Returns the complete slate of games; input date is not required. If no date is specified, it will default ot the current day.
+
+[date] - Optional, accepts a date in mm/dd/yyyy format (ex. 10/1/2018) or keywords 'yesterday', 'today', or 'tomorrow'
+
+Examples:
+
+-games
+-games yesterday
+"""
