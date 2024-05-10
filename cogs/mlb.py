@@ -153,11 +153,11 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
       today = datetime.date.today()
       if date is None:
         params['year'] = today.year
-      
-      if '/' in date:
-        params['date'] = date
       else:
-        params['date'] = get_datetime(date, 'mm/dd/yyyy')
+        if '/' in date:
+          params['date'] = date
+        else:
+          params['date'] = get_datetime(date, 'mm/dd/yyyy')
 
       async with aiohttp.ClientSession() as session:
         async with session.get(standings_url, params=params) as response:
@@ -166,9 +166,29 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
             log(f'{jdata["message"]} - CMD (record)', False)
             await ctx.send(jdata['message'])
           else:
-            league_record = jdata['leagueRecord']
+            division = jdata['team']['division']['name']
+            divisionGamesBack = jdata['divisionGamesBack']
 
-            standings_str = f'{team.upper()}: {league_record["wins"]}-{league_record["losses"]}'
+            if jdata['divisionRank'] == '1':
+              div_place = f'1st in {division}'
+            elif jdata['divisionRank'] == '2':
+              div_place = f'2nd in {division}'
+              if divisionGamesBack != '-':
+                div_place = f'{div_place} ({divisionGamesBack} GB)'
+            elif jdata['divisionRank'] == '3':
+              div_place = f'3rd in {division}'
+              if divisionGamesBack != '-':
+                div_place = f'{div_place} ({divisionGamesBack} GB)'
+            elif jdata['divisionRank'] == '4':
+              div_place = f'4th in {division}'
+              if divisionGamesBack != '-':
+                div_place = f'{div_place} ({divisionGamesBack} GB)'
+            else:
+              div_place = f'5th in {division}'
+              if divisionGamesBack != '-':
+                div_place = f'{div_place} ({divisionGamesBack} GB)'
+
+            standings_str = f'{team.upper()}: {jdata["wins"]}-{jdata["losses"]}, {div_place}'
             await ctx.send(standings_str)
   
   @commands.command(name='magic', brief='Gets the magic number for a team', help=magic_long_help)
