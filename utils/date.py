@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime ,timedelta
 
 def get_datetime(requested_date, format):
   month = 0
@@ -27,6 +27,7 @@ def get_datetime(requested_date, format):
     year = date_string_arr[2]
 
   if format == 'json': return { 'month': month, 'day': day, 'year': year }
+  elif format == 'datetime': return datetime.strptime(mdy_to_slash_date(month, day, year), '%m/%d/%y')
   else: return mdy_to_slash_date(month, day, year)
 
 def mdy_to_slash_date(month: str, day: str, year: str):

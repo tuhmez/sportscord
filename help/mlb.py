@@ -66,7 +66,7 @@ Examples:
 games_long_help = """
 -games [date]
 
-Returns the complete slate of games; input date is not required. If no date is specified, it will default ot the current day.
+Returns the complete slate of games; input date is not required. If no date is specified, it will default to the current day.
 
 [date] - Optional, accepts a date in mm/dd/yyyy format (ex. 10/1/2018) or keywords 'yesterday', 'today', or 'tomorrow'
 
@@ -74,4 +74,18 @@ Examples:
 
 -games
 -games yesterday
+"""
+
+matchup_long_help = """
+-matchup <input_team> [date]
+
+Returns the matchup for the desired team which includes game graphic and details like probables, lineup (if available), record; input date is not required. If no date is specified, it will default to the current date.
+
+<input_team> - Must be team abbreviation; ex. MIL (case-insensitive)
+
+[date] - Optional, accepts a date in mm/dd/yyyy format (ex. 10/1/2018) or keywords 'yesterday', 'today', or 'tomorrow'
+
+Examples:
+-matchup mil
+-matchup chc 10/1/2018
 """
