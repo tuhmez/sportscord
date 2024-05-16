@@ -300,7 +300,6 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           game_status_code = game_status['codedGameState']
           game_status_detail = game_status['detailedState']
 
-          linescore = game['linescore']
           if game_status_code != 'I' and game_status_code != 'F'and game_status_code != 'G' and game_status_code != 'O':
             game_time_utc = parser.isoparse(game['gameDate'])
             game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
@@ -309,6 +308,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
             game_time = game_time_local_tz if game_status['startTimeTBD'] == False else 'TBD'
             return_str = f'{game_status_detail} | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}'
           elif game_status_code == 'I':
+            linescore = game['linescore']
             inning_half = linescore['inningState']
             inning = linescore['currentInningOrdinal']
             away_score = linescore['teams']['away']['runs']
@@ -321,6 +321,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
             game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%m/%d/%Y %#I:%M %p")
             return_str = f'Postponed ({game["status"]["reason"]}) | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | Rescheduled time: {game_time_local_tz}'
           else:
+            linescore = game['linescore']
             inning = linescore['currentInning']
             away_score = linescore['teams']['away']['runs']
             home_score = linescore['teams']['home']['runs']
@@ -361,107 +362,115 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
 
       if date is not None:
         jdate = get_datetime(date, 'json')
+        jdate['month'] = str(jdate['month']).rjust(2, '0')
+        jdate['day'] = str(jdate['day']).rjust(2, '0')
       else:
         today = datetime.date.today()
-        jdate = { 'month': today.month, 'day': today.day, 'year': today.year }
+        jdate = { 'month': str(today.month).rjust(2, '0'), 'day': str(today.day).rjust(2, '0'), 'year': today.year }
 
       if score_response['isOK'] == True:
-        game = score_response['data'][0]
-        game_status = game['status']
-        game_status_code = game_status['codedGameState']
-        game_status_detail = game_status['detailedState']
-
-        game_id = game['game']['pk']
-        abstract_game_state = f'{game['status']['abstractGameState']}'.lower()
-
-        home_team = game['home']
-        away_team = game['away']
-
-        home_abbr = home_team['abbreviation'].upper()
-        away_abbr = away_team['abbreviation'].upper()
-
-        home_record = f'{home_team['record']['leagueRecord']['wins']}-{home_team['record']['leagueRecord']['losses']}'
-        away_record = f'{away_team['record']['leagueRecord']['wins']}-{away_team['record']['leagueRecord']['losses']}'
-
-        home_club_name = home_team['teamName'].lower().replace(' ', '-')
-        away_club_name = away_team['teamName'].lower().replace(' ', '-')
-        title = f'{away_team['name']} at {home_team['name']}'
-
-        url = f'{ext_gameday_url}/{away_club_name}-vs-{home_club_name}/{jdate['year']}/{jdate['month']}/{jdate['day']}/{game_id}/{abstract_game_state}'
-
-        linescore = game['linescore']
-
-        if game_status_code != 'I' and game_status_code != 'F'and game_status_code != 'G' and game_status_code != 'O':
-          game_time_utc = parser.isoparse(game['datetime']['dateTime'])
-          game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
-          game_time_local_tz = game_time_utc.astimezone(self.to_zone)
-          game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%#I:%M %p")
-          game_time = game_time_local_tz if game_status['startTimeTBD'] == False else 'TBD'
-
-          probables_jdata = probables_response['data']
-
-          if len(probables_jdata) != 0:
-            for i, game in enumerate(probables_jdata):
-              probables = game['probables']
-
-              away_pitcher = probables['awayProbable']
-              home_pitcher = probables['homeProbable']
-              
-              current_away_pitcher_data = None
-              if away_pitcher is not None:
-                away_probable_stats_response = await get_player_stats_request(away_pitcher)
-
-                if away_probable_stats_response['isOK'] == False:
-                  away_probables_jdata = None
-                else:
-                  away_probables_jdata = away_probable_stats_response['data']
-                  away_pitcher_stats = get_player_stats(away_probables_jdata['people'][0]['stats'], 'yearByYear')
-                  for j in away_pitcher_stats['splits']:
-                    if f'{j['season']}' == f'{jdate['year']}': current_away_pitcher_data = j; break
-
-              current_home_pitcher_data = None
-              if home_pitcher is not None:
-                home_probable_stats_response = await get_player_stats_request(home_pitcher)
-
-                if home_probable_stats_response['isOK'] == False:
-                  home_probables_jdata = None
-                else:
-                  home_probables_jdata = home_probable_stats_response['data']
-                  home_pitcher_stats = get_player_stats(home_probables_jdata['people'][0]['stats'], 'yearByYear')
-                  for j in home_pitcher_stats['splits']:
-                    if f'{j['season']}' == f'{jdate['year']}': current_home_pitcher_data = j; break
-
-          pitcher_statlines = get_probable_statline(home_pitcher=home_pitcher, away_pitcher=away_pitcher, home_jdata=home_probables_jdata, away_jdata=away_probables_jdata, current_home_pitcher_data=current_home_pitcher_data, current_away_pitcher_data=current_away_pitcher_data)
-
-          description = f'{game_status_detail} | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}\n\n{pitcher_statlines['away_pitcher_str']} vs. {pitcher_statlines['home_pitcher_str']}'
-        elif game_status_code == 'I':
-          inning = linescore['currentInning']
-          inning_half = linescore['inningState']
-          inning = linescore['currentInningOrdinal']
-          away_score = linescore['teams']['away']['runs']
-          home_score = linescore['teams']['home']['runs']
-          description = f'{inning_half} {inning} | {away_abbr}: {away_score} vs. {home_abbr}: {home_score}'
+        if len(score_response['data']) == 0:
+          date = f'{jdate['month']}/{jdate['day']}/{jdate['year']}'
+          msg = f'No games found for {team.upper()} on {date}!'
+          await ctx.send(msg)
         else:
-          inning = linescore['currentInning']
-          home_score = linescore['teams']['home']['runs']
-          away_score = linescore['teams']['away']['runs']
-          if home_score > away_score:
-            home_result = f'**{home_abbr} ({home_record}): {home_score}**'
-            away_result = f'{away_abbr} ({away_record}): {away_score}'
+          game = score_response['data'][0]
+          game_status = game['status']
+          game_status_code = game_status['codedGameState']
+          game_status_detail = game_status['detailedState']
+
+          game_id = game['game']['pk']
+
+          home_team = game['home']
+          away_team = game['away']
+
+          home_abbr = home_team['abbreviation'].upper()
+          away_abbr = away_team['abbreviation'].upper()
+
+          home_record = f'{home_team['record']['leagueRecord']['wins']}-{home_team['record']['leagueRecord']['losses']}'
+          away_record = f'{away_team['record']['leagueRecord']['wins']}-{away_team['record']['leagueRecord']['losses']}'
+
+          home_club_name = home_team['teamName'].lower().replace(' ', '-')
+          away_club_name = away_team['teamName'].lower().replace(' ', '-')
+          title = f'{away_team['name']} at {home_team['name']}'
+
+          url = f'{ext_gameday_url}/{away_club_name}-vs-{home_club_name}/{jdate['year']}/{jdate['month']}/{jdate['day']}/{game_id}'
+
+          linescore = game['linescore']
+
+          if game_status_code != 'I' and game_status_code != 'F'and game_status_code != 'G' and game_status_code != 'O':
+            url = f'{url}/preview'
+            game_time_utc = parser.isoparse(game['datetime']['dateTime'])
+            game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
+            game_time_local_tz = game_time_utc.astimezone(self.to_zone)
+            game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%#I:%M %p")
+            game_time = game_time_local_tz if game_status['startTimeTBD'] == False else 'TBD'
+
+            probables_jdata = probables_response['data']
+
+            if len(probables_jdata) != 0:
+              for i, game in enumerate(probables_jdata):
+                probables = game['probables']
+
+                away_pitcher = probables['awayProbable']
+                home_pitcher = probables['homeProbable']
+                
+                current_away_pitcher_data = None
+                if away_pitcher is not None:
+                  away_probable_stats_response = await get_player_stats_request(away_pitcher)
+
+                  if away_probable_stats_response['isOK'] == False:
+                    away_probables_jdata = None
+                  else:
+                    away_probables_jdata = away_probable_stats_response['data']
+                    away_pitcher_stats = get_player_stats(away_probables_jdata['people'][0]['stats'], 'yearByYear')
+                    for j in away_pitcher_stats['splits']:
+                      if f'{j['season']}' == f'{jdate['year']}': current_away_pitcher_data = j; break
+
+                current_home_pitcher_data = None
+                if home_pitcher is not None:
+                  home_probable_stats_response = await get_player_stats_request(home_pitcher)
+
+                  if home_probable_stats_response['isOK'] == False:
+                    home_probables_jdata = None
+                  else:
+                    home_probables_jdata = home_probable_stats_response['data']
+                    home_pitcher_stats = get_player_stats(home_probables_jdata['people'][0]['stats'], 'yearByYear')
+                    for j in home_pitcher_stats['splits']:
+                      if f'{j['season']}' == f'{jdate['year']}': current_home_pitcher_data = j; break
+
+            pitcher_statlines = get_probable_statline(home_pitcher=home_pitcher, away_pitcher=away_pitcher, home_jdata=home_probables_jdata, away_jdata=away_probables_jdata, current_home_pitcher_data=current_home_pitcher_data, current_away_pitcher_data=current_away_pitcher_data)
+
+            description = f'{game_status_detail} | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}\n\n{pitcher_statlines['away_pitcher_str']} vs. {pitcher_statlines['home_pitcher_str']}'
+          elif game_status_code == 'I':
+            inning = linescore['currentInning']
+            inning_half = linescore['inningState']
+            inning = linescore['currentInningOrdinal']
+            away_score = linescore['teams']['away']['runs']
+            home_score = linescore['teams']['home']['runs']
+            description = f'{inning_half} {inning} | {away_abbr}: {away_score} vs. {home_abbr}: {home_score}'
           else:
-            home_result = f'{home_abbr} ({home_record}): {home_score}'
-            away_result = f'**{away_abbr} ({away_record}): {away_score}**'
+            url = f'{url}/final/wrap'
+            inning = linescore['currentInning']
+            home_score = linescore['teams']['home']['runs']
+            away_score = linescore['teams']['away']['runs']
+            if home_score > away_score:
+              home_result = f'**{home_abbr} ({home_record}): {home_score}**'
+              away_result = f'{away_abbr} ({away_record}): {away_score}'
+            else:
+              home_result = f'{home_abbr} ({home_record}): {home_score}'
+              away_result = f'**{away_abbr} ({away_record}): {away_score}**'
 
-          status_str = 'FINAL' if inning == 9 else f'FINAL/{inning}'
-          description = f'{status_str} | {away_result} vs. {home_result}'
+            status_str = 'FINAL' if inning == 9 else f'FINAL/{inning}'
+            description = f'{status_str} | {away_result} vs. {home_result}'
 
-      embed = discord.Embed(title=title, description=description, url=url)
-      embed.set_author(name='sportscord')
-      embed.set_image(url=f'attachment://{away_abbr.lower()}-vs-{home_abbr.lower()}.png')
-      embed.set_footer(text='Courtesy of Sports Stats API and MLB.')
-      matchup_graphic.seek(0)
-      log(f'Got matchup for {team.upper()}', True)
-      await ctx.send(file=discord.File(matchup_graphic, f'{away_abbr.lower()}-vs-{home_abbr.lower()}.png'), embed=embed)
+          embed = discord.Embed(title=title, description=description, url=url)
+          embed.set_author(name='sportscord')
+          embed.set_image(url=f'attachment://{away_abbr.lower()}-vs-{home_abbr.lower()}.png')
+          embed.set_footer(text='Courtesy of Sports Stats API and MLB.')
+          matchup_graphic.seek(0)
+          log(f'Got matchup for {team.upper()}', True)
+          await ctx.send(file=discord.File(matchup_graphic, f'{away_abbr.lower()}-vs-{home_abbr.lower()}.png'), embed=embed)
 
 async def setup(bot):
   await bot.add_cog(MLB(bot))
