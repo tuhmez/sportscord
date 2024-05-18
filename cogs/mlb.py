@@ -119,8 +119,11 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
                 await ctx.send(return_str)
             log(f'Got score for {team.upper()}. - CMD (score)', True)
         else:
-          date = datetime.datetime.strptime(date, 'mm/dd/yyyy')
-          msg = f'No games found for {team.upper()} on {date.strftime("%m/%d/%y")}!'
+          if date is None:
+            date = get_datetime('today', 'mm/dd/yyyy')
+          else:
+            date = get_datetime(date, 'mm/dd/yyyy')
+          msg = f'No games found for {team.upper()} on {date}!'
           log(f'{msg} - CMD (score)', True)
           await ctx.send(msg)
 
@@ -224,6 +227,9 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           home_pitcher = probables['homeProbable']
           
           current_year = get_datetime(date, 'json')
+
+          current_away_pitcher_data = None
+          away_jdata = None
           if away_pitcher is not None:
             away_response = await get_player_stats_request(away_pitcher)
 
@@ -240,9 +246,10 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
                 log(f'{msg} - CMD (probables)', True)
                 await ctx.send(msg)
           
+          current_home_pitcher_data = None
+          home_jdata = None
           if home_pitcher is not None:
             home_response = await get_player_stats_request(home_pitcher)
-
             if home_response['isOK'] == False:
               log(home_response['msg'], False)
               await ctx.send(home_response['msg'])
@@ -416,28 +423,29 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
                 home_pitcher = probables['homeProbable']
                 
                 current_away_pitcher_data = None
+                away_probables_jdata = None
                 if away_pitcher is not None:
                   away_probable_stats_response = await get_player_stats_request(away_pitcher)
 
-                  if away_probable_stats_response['isOK'] == False:
-                    away_probables_jdata = None
-                  else:
+                  if away_probable_stats_response['isOK'] == True:
                     away_probables_jdata = away_probable_stats_response['data']
                     away_pitcher_stats = get_player_stats(away_probables_jdata['people'][0]['stats'], 'yearByYear')
-                    for j in away_pitcher_stats['splits']:
-                      if f'{j['season']}' == f'{jdate['year']}': current_away_pitcher_data = j; break
+
+                    if away_pitcher_stats is not None:
+                      for j in away_pitcher_stats['splits']:
+                        if f'{j['season']}' == f'{jdate['year']}': current_away_pitcher_data = j; break
 
                 current_home_pitcher_data = None
+                home_probables_jdata = None
                 if home_pitcher is not None:
                   home_probable_stats_response = await get_player_stats_request(home_pitcher)
-
-                  if home_probable_stats_response['isOK'] == False:
-                    home_probables_jdata = None
-                  else:
+                  if home_probable_stats_response['isOK'] == True:
                     home_probables_jdata = home_probable_stats_response['data']
                     home_pitcher_stats = get_player_stats(home_probables_jdata['people'][0]['stats'], 'yearByYear')
-                    for j in home_pitcher_stats['splits']:
-                      if f'{j['season']}' == f'{jdate['year']}': current_home_pitcher_data = j; break
+
+                    if home_pitcher_stats is not None:
+                      for j in home_pitcher_stats['splits']:
+                        if f'{j['season']}' == f'{jdate['year']}': current_home_pitcher_data = j; break
 
             pitcher_statlines = get_probable_statline(home_pitcher=home_pitcher, away_pitcher=away_pitcher, home_jdata=home_probables_jdata, away_jdata=away_probables_jdata, current_home_pitcher_data=current_home_pitcher_data, current_away_pitcher_data=current_away_pitcher_data)
 
