@@ -89,3 +89,22 @@ Examples:
 -matchup mil
 -matchup chc 10/1/2018
 """
+
+standings_long_help = """
+-standings [specific_type] [conf_div_or_date] [date]
+
+Returns the standings for MLB for various types.
+
+[specific_type] - Can be either:
+                    + A specific division or league when wanting regular season standings. Valid entries include: 'al', 'nl', 'alc', 'ale', 'alw', 'nlc', 'nle', 'nlw'
+                    + The keyword 'playoff' in which case will request a playoff standings view. This keyword requires an additional parameter. Please see conf_div_or_date arg for help.
+[conf_div_or_date] - Optionsal, Can be either:
+                      + A specific league when requesting playoff standings. Valid entries include: 'al' or 'nl'
+                      + A date when requesting playoff standings
+[date] - Optional, must be in mm/dd/yyyy format (ex. 10/1/2018)
+
+Examples:
+
+-record mil
+-record sea 2001
+"""

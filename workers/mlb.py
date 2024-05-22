@@ -3,7 +3,7 @@ import aiohttp
 import datetime
 from reportlab.graphics import renderPM
 
-from urls.mlb import game_url, games_url, logo_url, matchup_graphic_url, player_stats_url, probables_url, score_url, standings_url, team_url
+from urls.mlb import game_url, games_url, logo_url, matchup_graphic_url, player_stats_url, probables_url, score_url, standings_url, record_url, team_url
 from utils.mlb import convert_svg_to_png
 from utils.date import get_datetime
 
@@ -102,7 +102,7 @@ async def get_record_request(team: str, date: str = None):
         params['date'] = get_datetime('today', 'mm/dd/yyyy')
 
     async with aiohttp.ClientSession() as session:
-      async with session.get(standings_url, params=params) as standings_response:
+      async with session.get(record_url, params=params) as standings_response:
         result['data'] = await standings_response.json()
         return result
       
@@ -123,7 +123,7 @@ async def get_magic_number_request(team: str, year: str = None):
       params['year'] = today.year
 
     async with aiohttp.ClientSession() as session:
-      async with session.get(standings_url, params=params) as standings_response:
+      async with session.get(record_url, params=params) as standings_response:
         jdata = await standings_response.json()
         if 'message' in jdata is None:
           result['msg'] = jdata['message']
@@ -160,7 +160,7 @@ async def get_probables_request(team: str, date: str):
 async def get_player_stats_request(id: str):
   result = { 'msg': '', 'isOK': True }
 
-  if id is '':
+  if id == '':
     result['msg'] = 'Player ID invalid'
     result['isOK'] = False
     return result
@@ -215,4 +215,20 @@ async def get_matchup_graphic_request(team: str, date: str = None):
   async with aiohttp.ClientSession() as session:
     async with session.get(matchup_graphic_url, params=params) as matchup_graphic_response:
       result['data'] = io.BytesIO(await matchup_graphic_response.read())
+      return result
+    
+async def get_standings_request(standings_type: str = None, specific_type: str = None, date: str = None):
+  result = { 'msg': '', 'isOK': True }
+
+  params = {
+    'date': get_datetime(date if date is not None else 'today', 'mm/dd/yyyy'),
+    'type': standings_type if standings_type is not None else 'division'
+  }
+
+  if specific_type is not None:
+    params['specificType'] = specific_type
+
+  async with aiohttp.ClientSession() as session:
+    async with session.get(standings_url, params=params) as standings_response:
+      result['data'] = await standings_response.json()
       return result

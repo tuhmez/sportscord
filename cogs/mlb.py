@@ -1,16 +1,17 @@
 import discord
 from discord.ext import commands
+from array import array
 import datetime
 from dateutil import parser, tz
 
 from urls.mlb import boxscore_url, logo_url, ext_gameday_url
-from utils.mlb import  get_player_stats, get_probable_statline
+from utils.mlb import get_ordinal, get_player_stats, get_probable_statline, translate_specific_type_to_general_type_for_standings, translate_long_division_to_abbreviation, get_playoff_standing_str
 from utils.logger import log
 from utils.date import get_datetime
 
-from help.mlb import games_long_help, magic_long_help, matchup_long_help, probables_long_help, record_long_help, score_long_help
+from help.mlb import games_long_help, magic_long_help, matchup_long_help, probables_long_help, record_long_help, score_long_help, standings_long_help
 
-from workers.mlb import get_game_request, get_games_request, get_logo_request, get_magic_number_request, get_matchup_graphic_request, get_player_stats_request, get_probables_request, get_record_request, get_score_request, get_team_request
+from workers.mlb import get_game_request, get_games_request, get_logo_request, get_magic_number_request, get_matchup_graphic_request, get_player_stats_request, get_probables_request, get_record_request, get_score_request, get_standings_request, get_team_request
 
 class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
   def __init__(self, bot):
@@ -143,22 +144,23 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
         division = jdata['team']['division']['name']
         divisionGamesBack = jdata['divisionGamesBack']
 
+        ordinal = get_ordinal(jdata['divisionRank'])
         if jdata['divisionRank'] == '1':
-          div_place = f'1st in {division}'
+          div_place = f'{ordinal} in {division}'
         elif jdata['divisionRank'] == '2':
-          div_place = f'2nd in {division}'
+          div_place = f'{ordinal} in {division}'
           if divisionGamesBack != '-':
             div_place = f'{div_place} ({divisionGamesBack} GB)'
         elif jdata['divisionRank'] == '3':
-          div_place = f'3rd in {division}'
+          div_place = f'{ordinal} in {division}'
           if divisionGamesBack != '-':
             div_place = f'{div_place} ({divisionGamesBack} GB)'
         elif jdata['divisionRank'] == '4':
-          div_place = f'4th in {division}'
+          div_place = f'{ordinal} in {division}'
           if divisionGamesBack != '-':
             div_place = f'{div_place} ({divisionGamesBack} GB)'
         else:
-          div_place = f'5th in {division}'
+          div_place = f'{ordinal} in {division}'
           if divisionGamesBack != '-':
             div_place = f'{div_place} ({divisionGamesBack} GB)'
 
@@ -230,6 +232,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
 
           current_away_pitcher_data = None
           away_jdata = None
+          away_pitcher_stats = None
+
           if away_pitcher is not None:
             away_response = await get_player_stats_request(away_pitcher)
 
@@ -238,16 +242,23 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
               await ctx.send(away_response['msg'])
             else:
               away_jdata = away_response['data']
-              away_pitcher_stats = get_player_stats(away_jdata['people'][0]['stats'], 'yearByYear')
-              for j in away_pitcher_stats['splits']:
-                if j['season'] == current_year['year']: current_away_pitcher_data = j; break
-              if away_pitcher_stats == None:
-                msg = f'Could not pitcher stats for {team.upper()}'
-                log(f'{msg} - CMD (probables)', True)
-                await ctx.send(msg)
+              if away_jdata['people'][0]['stats'] is not None:
+                away_pitcher_stats = get_player_stats(away_jdata['people'][0]['stats'], 'yearByYear')
+
+              if away_pitcher_stats is not None:
+                for j in away_pitcher_stats['splits']:
+                  if j['season'] == current_year['year']:
+                    current_away_pitcher_data = j
+                    break
+                if away_pitcher_stats == None:
+                  msg = f'Could not find pitcher stats for {team.upper()}'
+                  log(f'{msg} - CMD (probables)', True)
+                  await ctx.send(msg)
           
           current_home_pitcher_data = None
           home_jdata = None
+          home_pitcher_stats = None
+
           if home_pitcher is not None:
             home_response = await get_player_stats_request(home_pitcher)
             if home_response['isOK'] == False:
@@ -255,13 +266,19 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
               await ctx.send(home_response['msg'])
             else:
               home_jdata = home_response['data']
-              home_pitcher_stats = get_player_stats(home_jdata['people'][0]['stats'], 'yearByYear')
-              for j in home_pitcher_stats['splits']:
-                if j['season'] == current_year['year']: current_home_pitcher_data = j; break
-              if home_pitcher_stats == None:
-                msg = f'Could not pitcher stats for {team.upper()}'
-                log(f'{msg} - CMD (probables)', True)
-                await ctx.send(msg)
+              print(home_jdata['people'][0])
+              if home_jdata['people'][0]['stats'] is not None:
+                home_pitcher_stats = get_player_stats(home_jdata['people'][0]['stats'], 'yearByYear')
+              
+              if home_pitcher_stats is not None:
+                for j in home_pitcher_stats['splits']:
+                  if j['season'] == current_year['year']:
+                    current_home_pitcher_data = j
+                    break
+                if home_pitcher_stats == None:
+                  msg = f'Could not find pitcher stats for {team.upper()}'
+                  log(f'{msg} - CMD (probables)', True)
+                  await ctx.send(msg)
 
           pitcher_statlines = get_probable_statline(home_pitcher=home_pitcher, away_pitcher=away_pitcher, home_jdata=home_jdata, away_jdata=away_jdata, current_home_pitcher_data=current_home_pitcher_data, current_away_pitcher_data=current_away_pitcher_data)
           if len(game_jdata) != 0:
@@ -298,6 +315,10 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           return_str: str
           away_team = game['teams']['away']['team']
           home_team = game['teams']['home']['team']
+
+          if away_team['sport']['id'] != 1 or home_team['sport']['id'] != 1:
+            continue
+
           away_abbr = away_team['abbreviation']
           home_abbr = home_team['abbreviation']
           away_record = f'{game["teams"]["away"]["leagueRecord"]["wins"]}-{game["teams"]["away"]["leagueRecord"]["losses"]}'
@@ -479,6 +500,85 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           matchup_graphic.seek(0)
           log(f'Got matchup for {team.upper()}', True)
           await ctx.send(file=discord.File(matchup_graphic, f'{away_abbr.lower()}-vs-{home_abbr.lower()}.png'), embed=embed)
+
+  @commands.command(name='standings', brief='Gets the standings for a division, conference, league, or wild card', help=standings_long_help)
+  async def get_standings(self, ctx, specific_type: str, conf_div_or_date: str = None, date: str = None):
+    if specific_type is None:
+      msg = 'A type must be provided! Valid types are division or league abbreviations or the keyword \'playoff\''
+      log(msg, False)
+      await ctx.send(msg)
+    else:
+      standings_type = translate_specific_type_to_general_type_for_standings(specific_type)
+
+      if specific_type.lower().startswith('playoff') == True:
+        if conf_div_or_date is not None and conf_div_or_date.find('/') != -1:
+          date = conf_div_or_date
+      else:
+        if conf_div_or_date is not None:
+          date = conf_div_or_date
+
+      standings_response = await get_standings_request(standings_type=standings_type, specific_type=specific_type if standings_type == 'division' or standings_type == 'league' else conf_div_or_date, date=date)
+
+      if standings_response['isOK'] == False:
+        log(standings_response['msg'], False)
+        await ctx.send(standings_response['msg'])
+      else:
+        jdata = standings_response['data']
+        if 'message' in jdata is None:
+          log(f'{jdata["message"]} - CMD (standings)', False)
+          await ctx.send(jdata['message'])
+        else:
+          record_strings = []
+
+          print(standings_type)
+          if standings_type.lower().startswith('playoff') == True:
+            records = jdata['records']
+            pref_conf = conf_div_or_date
+            if pref_conf is None:
+              al_division_leader_records = records[2]['teamRecords']
+              al_wild_card_records = records[0]['teamRecords']
+              nl_division_leader_records = records[3]['teamRecords']
+              nl_wild_card_records = records[1]['teamRecords']
+
+              al_playoff_str = get_playoff_standing_str('AL', al_division_leader_records, al_wild_card_records)
+              nl_playoff_str = get_playoff_standing_str('NL', nl_division_leader_records, nl_wild_card_records)
+
+              record_strings.append(al_playoff_str)
+              record_strings.append('\n')
+              record_strings.append(nl_playoff_str)
+            else:
+              if pref_conf.lower().startswith('al') == True:
+                al_division_leader_records = records[1]['teamRecords']
+                al_wild_card_records = records[0]['teamRecords']
+
+                record_strings.append(get_playoff_standing_str('AL', al_division_leader_records, al_wild_card_records))
+              elif pref_conf.lower().startswith('nl') == True:
+                nl_division_leader_records = records[1]['teamRecords']
+                nl_wild_card_records = records[0]['teamRecords']
+
+                record_strings.append(get_playoff_standing_str('NL', nl_division_leader_records, nl_wild_card_records))
+              else:
+                msg = 'Specific type not recognized; for playoff standings, be sure to use either \'AL\' or \'NL\''
+                log(msg, False)
+                await ctx.send(msg)
+          else:
+            records = jdata['records'][0]['teamRecords']
+            for record in records:
+              record_str = f'{record['abbreviation']} ({record['wins']}-{record['losses']})'
+
+              if standings_type is None or standings_type == 'division':
+                if record['divisionLeader'] == False:
+                  record_str = f'{record_str} ({record['divisionGamesBack']}GB)'
+              else:
+                record_str = f'{record_str} ({record['leagueGamesBack']}GB) ({record['wildCardGamesBack']}WCGB)'
+
+
+              if record['clinched'] == True:
+                record_str = f'{record['clinchIndicator']} - {record_str}'
+              record_strings.append(record_str)
+          
+          await ctx.send('\n'.join(record_strings))
+          log(f'Got standings for - type: {specific_type}, specific_type: {specific_type}, date: {date}', True)
 
 async def setup(bot):
   await bot.add_cog(MLB(bot))
