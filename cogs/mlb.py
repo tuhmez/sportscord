@@ -684,8 +684,9 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
             pitch_data = current_play_event['pitchData']
 
             current_pitch_str = None
-            if play_details['type'] is not None:
-              current_pitch_str = f'{pitch_data['startSpeed']} mph {play_details['type']['description']}'
+            if 'type' in play_details:
+              if play_details['type'] is not None:
+                current_pitch_str = f'{pitch_data['startSpeed']} mph {play_details['type']['description']}'
             
             play_str = f'{play_details['description']}'
 
