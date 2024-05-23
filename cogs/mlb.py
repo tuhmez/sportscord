@@ -717,10 +717,6 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
       log(msg, False)
       await ctx.send(msg)
     else:
-      # get game feed
-      # get teams abbr for channel name: <at_team>_vs_<home_team>-short-date_g<game_num_for_day>
-      # be smart in the future? maybe next step to this is to allow future games to be sub'd but need to figure out routines/timers
-
       game_feed_response = await get_feed_request(team, date)
 
       if game_feed_response['isOK'] == False:
@@ -788,18 +784,13 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
 
           await ctx.send(game_channel_msg)
 
-          # print(self.get_current_play.is_running())
           if channel_name not in self.running_tasks:
-            #ctx: commands.Context, channel_id: int, team: str, game_index: int = 0
             new_task = tasks.loop(seconds=10)(self.get_current_play)
             self.running_tasks[channel_name] = new_task
             new_task.start(ctx=ctx, channel_id=game_channel.id, team=team, game_index=game_index)
-            # self.get_current_play.start(ctx=ctx, channel_id=game_channel.id, team=team, game_index=game_index)
 
   @commands.command(name='unsub', help='Unsubscribes from a game subscription')
   async def unsubscribe_from_live_game(self, ctx: commands.Context, team: str):
-    # if self.get_current_play.is_running() == True:
-    # self.get_current_play.cancel()
     running_tasks_keys = list(self.running_tasks.keys())
 
     cancel_key = None
