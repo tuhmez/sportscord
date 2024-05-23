@@ -18,7 +18,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
     self.from_utc_zone = tz.tzutc()
     self.to_zone = tz.tzlocal()
     self.current_play_id = None
-    self.running_tasks = []
+    self.running_tasks = {}
 
   @commands.command(name='logo', brief='Get a logo for an MLB team')
   async def get_logo(self, ctx: commands.Context, team: str):
@@ -580,8 +580,6 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           await ctx.send('\n'.join(record_strings))
           log(f'Got standings for - type: {specific_type}, specific_type: {specific_type}, date: {date}', True)
 
-
-  @tasks.loop(seconds=20)
   async def get_current_play(self, ctx: commands.Context, channel_id: int, team: str, game_index: int = 0):
     game_channel = ctx.guild.get_channel(channel_id)
     game_feed_response = await get_feed_request(team)
@@ -779,7 +777,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           game_channel_msg = None
 
           if existing_channel is None:
-            game_channel = await ctx.guild.create_text_channel(name=channel_name, category=category, reason='Live subscription to game', overwrites=overwrites)
+            topic = 'Feed Status: **LIVE**'
+            game_channel = await ctx.guild.create_text_channel(name=channel_name, category=category, reason='Live subscription to game', overwrites=overwrites, topic=topic)
             game_channel_msg = f'Created channel at {game_channel.mention} for the {away_team_abbr.upper()} vs. {home_team_abbr.upper()} game'
             if game_suffix is not None:
               created_channel_msg = f'{created_channel_msg} ({game_suffix.upper()})'
@@ -790,15 +789,47 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           await ctx.send(game_channel_msg)
 
           # print(self.get_current_play.is_running())
-          if self.get_current_play.is_running() == False:
+          if channel_name not in self.running_tasks:
             #ctx: commands.Context, channel_id: int, team: str, game_index: int = 0
-            self.get_current_play.start(ctx=ctx, channel_id=game_channel.id, team=team, game_index=game_index)
+            new_task = tasks.loop(seconds=10)(self.get_current_play)
+            self.running_tasks[channel_name] = new_task
+            new_task.start(ctx=ctx, channel_id=game_channel.id, team=team, game_index=game_index)
+            # self.get_current_play.start(ctx=ctx, channel_id=game_channel.id, team=team, game_index=game_index)
 
   @commands.command(name='unsub', help='Unsubscribes from a game subscription')
   async def unsubscribe_from_live_game(self, ctx: commands.Context, team: str):
-    if self.get_current_play.is_running() == True:
-      self.get_current_play.cancel()
-      await ctx.send(f'Unsubscribed from game for {team}')
+    # if self.get_current_play.is_running() == True:
+    # self.get_current_play.cancel()
+    running_tasks_keys = list(self.running_tasks.keys())
+
+    cancel_key = None
+    for key in running_tasks_keys:
+      if team in key:
+        cancel_key = key
+        break
+
+    if cancel_key is not None:
+      channel = discord.utils.get(ctx.guild.channels, name=cancel_key)
+      new_topic = 'Feed Status: Inactive'
+      await channel.edit(topic=new_topic)
+      self.running_tasks[cancel_key].cancel()
+      del self.running_tasks[cancel_key]
+      await ctx.send(f'Unsubscribed from game for {team.upper()}')
+
+  @commands.command(name='livelist', help='Shows the live games currently subscribed to')
+  async def get_subscribed_games(self, ctx: commands.Context):
+    game_keys = list(self.running_tasks.keys())
+
+    if len(game_keys) == 0:
+      await ctx.send('No active subscriptions!')
+    else:
+      mentions = []
+      for key in game_keys:
+        channel = discord.utils.get(ctx.guild.channels, name=key)
+        mentions.append(channel.mention)
+      
+      channels_str = '\n'.join(mentions)
+      await ctx.send(f'Active subscriptions:\n{channels_str}')
 
 
 
