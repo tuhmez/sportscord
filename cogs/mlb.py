@@ -674,7 +674,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           """.format(overview_str=overview_str,description=play_details['description'])
           await game_channel.send(final_str)
         else:
-          play_id = current_play_event['playId']
+          if 'playId' in current_play_event:
+            play_id = current_play_event['playId']
           if self.current_play_id != play_id:
             self.current_play_id = play_id
 
