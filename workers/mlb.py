@@ -3,7 +3,7 @@ import aiohttp
 import datetime
 from reportlab.graphics import renderPM
 
-from urls.mlb import game_url, games_url, logo_url, matchup_graphic_url, player_stats_url, probables_url, score_url, standings_url, record_url, team_url
+from urls.mlb import feed_url, game_url, games_url, logo_url, matchup_graphic_url, player_stats_url, probables_url, score_url, standings_url, record_url, team_url
 from utils.mlb import convert_svg_to_png
 from utils.date import get_datetime
 
@@ -231,4 +231,22 @@ async def get_standings_request(standings_type: str = None, specific_type: str =
   async with aiohttp.ClientSession() as session:
     async with session.get(standings_url, params=params) as standings_response:
       result['data'] = await standings_response.json()
+      return result
+    
+async def get_feed_request(team: str, date: str = None):
+  result = { 'msg': '', 'isOK': True }
+
+  if team is None:
+    result['msg'] = 'Team must be provided in the first argument. Please use a team\'s common abbreviation.'
+    result['isOK'] = False
+    return result
+
+  params = {
+    'date': get_datetime(date if date is not None else 'today', 'mm/dd/yyyy'),
+    'abbreviation': team.lower()
+  }
+
+  async with aiohttp.ClientSession() as session:
+    async with session.get(feed_url, params=params) as feed_response:
+      result['data'] = await feed_response.json()
       return result

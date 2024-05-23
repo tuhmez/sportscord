@@ -1,6 +1,5 @@
 import discord
-from discord.ext import commands
-from array import array
+from discord.ext import commands, tasks
 import datetime
 from dateutil import parser, tz
 
@@ -11,16 +10,18 @@ from utils.date import get_datetime
 
 from help.mlb import games_long_help, magic_long_help, matchup_long_help, probables_long_help, record_long_help, score_long_help, standings_long_help
 
-from workers.mlb import get_game_request, get_games_request, get_logo_request, get_magic_number_request, get_matchup_graphic_request, get_player_stats_request, get_probables_request, get_record_request, get_score_request, get_standings_request, get_team_request
+from workers.mlb import get_feed_request, get_game_request, get_games_request, get_logo_request, get_magic_number_request, get_matchup_graphic_request, get_player_stats_request, get_probables_request, get_record_request, get_score_request, get_standings_request, get_team_request
 
 class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
   def __init__(self, bot):
-    self.bot = bot
+    self.bot: commands.Bot = bot
     self.from_utc_zone = tz.tzutc()
     self.to_zone = tz.tzlocal()
+    self.current_play_id = None
+    self.running_tasks = []
 
   @commands.command(name='logo', brief='Get a logo for an MLB team')
-  async def get_logo(self, ctx, team: str):
+  async def get_logo(self, ctx: commands.Context, team: str):
     logo_result = await get_logo_request(team, 'png')
     team_result = await get_team_request(team)
     if logo_result['isOK'] == False:
@@ -41,9 +42,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
       log(f'Got {team.upper()} logo. - CMD (logo)', True)
       await ctx.send(file=discord.File(png_image, f'{team}.png'), embed=embed)
 
-
   @commands.command(name='score', brief='Gets the score for a given team', help=score_long_help)
-  async def get_score(self, ctx, team: str, date: str = None):
+  async def get_score(self, ctx: commands.Context, team: str, date: str = None):
       game_response = await get_game_request(team, date)
       exit_loop = False
       if game_response['isOK'] == False:
@@ -129,7 +129,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           await ctx.send(msg)
 
   @commands.command(name='record', brief='Gets the record for a team', help=record_long_help)
-  async def get_record(self, ctx, team: str, date: str = None):
+  async def get_record(self, ctx: commands.Context, team: str, date: str = None):
     record_response = await get_record_request(team, date)
 
     if record_response['isOK'] == False:
@@ -168,7 +168,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
         await ctx.send(standings_str)
   
   @commands.command(name='magic', brief='Gets the magic number for a team', help=magic_long_help)
-  async def get_magic_number(self, ctx, team: str, year: str = None):
+  async def get_magic_number(self, ctx: commands.Context, team: str, year: str = None):
     magic_number_response = await get_magic_number_request(team, year)
     if magic_number_response['isOK'] == False:
       log(magic_number_response['msg'], False)
@@ -188,7 +188,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
       await ctx.send(magic_num_str)
   
   @commands.command(name='probables', brief='Gets the pitching probables for a game', help=probables_long_help)
-  async def get_probables(self, ctx, team: str, date: str = None):
+  async def get_probables(self, ctx: commands.Context, team: str, date: str = None):
     if team is None:
       msg = f'Team must be provided as the first argument'
       log(f'{msg} - CMD (probables)', False)
@@ -297,7 +297,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
         await ctx.send(msg)
 
   @commands.command(name='games', brief='Get all games for a day', help=games_long_help)
-  async def get_games(self, ctx, date: str = None):
+  async def get_games(self, ctx: commands.Context, date: str = None):
     params = {
       'date': get_datetime(date if date is not None else 'today', 'mm/dd/yyyy')
     }
@@ -373,7 +373,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
         await ctx.send(msg)
 
   @commands.command(name='matchup', brief='Gets the game matchup by date', help=matchup_long_help)
-  async def get_matchup(self, ctx, team: str, date: str = None):
+  async def get_matchup(self, ctx: commands.Context, team: str, date: str = None):
     matchup_graphic_response = await get_matchup_graphic_request(team, date)
     score_response = await get_score_request(team, date)
     probables_response = await get_probables_request(team, date)
@@ -502,7 +502,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           await ctx.send(file=discord.File(matchup_graphic, f'{away_abbr.lower()}-vs-{home_abbr.lower()}.png'), embed=embed)
 
   @commands.command(name='standings', brief='Gets the standings for a division, conference, league, or wild card', help=standings_long_help)
-  async def get_standings(self, ctx, specific_type: str, conf_div_or_date: str = None, date: str = None):
+  async def get_standings(self, ctx: commands.Context, specific_type: str, conf_div_or_date: str = None, date: str = None):
     if specific_type is None:
       msg = 'A type must be provided! Valid types are division or league abbreviations or the keyword \'playoff\''
       log(msg, False)
@@ -579,6 +579,228 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           
           await ctx.send('\n'.join(record_strings))
           log(f'Got standings for - type: {specific_type}, specific_type: {specific_type}, date: {date}', True)
+
+
+  @tasks.loop(seconds=20)
+  async def get_current_play(self, ctx: commands.Context, channel_id: int, team: str, game_index: int = 0):
+    game_channel = ctx.guild.get_channel(channel_id)
+    game_feed_response = await get_feed_request(team)
+
+    if game_feed_response['isOK'] == True:
+      games = game_feed_response['data']
+
+      subscribed_game = games[game_index]
+
+      game_data = subscribed_game['gameData']
+      live_data = subscribed_game['liveData']
+      linescore = live_data['linescore']
+
+      away_team_game_data = game_data['teams']['away']
+      home_team_game_data = game_data['teams']['home']
+
+      away_team_abbr = away_team_game_data['abbreviation']
+      away_team_record = f'{away_team_game_data['record']['wins']}-{away_team_game_data['record']['losses']}'
+
+      home_team_abbr = home_team_game_data['abbreviation']
+      home_team_record = f'{home_team_game_data['record']['wins']}-{home_team_game_data['record']['losses']}'
+
+      away_linescore = linescore['teams']['away']
+      home_linescore = linescore['teams']['home']
+
+      game_status = game_data['status']
+
+      if game_status['statusCode'] == 'F':
+        inning = linescore['currentInning']
+        status_str = 'FINAL' if inning == 9 else f'FINAL/{inning}'
+        if home_linescore['runs'] > away_linescore['runs']:
+          home_result = f'**{home_team_abbr} ({home_team_record}): {home_linescore['runs']}**'
+          away_result = f'{away_team_abbr} ({away_team_record}): {away_linescore['runs']}'
+        else:
+          home_result = f'{home_team_abbr} ({home_team_record}): {home_linescore['runs']}'
+          away_result = f'**{away_team_abbr} ({away_team_record}): {away_linescore['runs']}**'
+
+        status_str = 'FINAL' if inning == 9 else f'FINAL/{inning}'
+        return_str = f'{status_str} | {away_result} vs. {home_result}'
+
+        await game_channel.send(return_str)
+        self.get_current_play.cancel()
+      else:
+        inning_top_bottom = linescore['inningHalf']
+        inning_ordinal = linescore['currentInningOrdinal']
+        inning_summation = f'{inning_top_bottom} {inning_ordinal}'
+
+        score_summation = f'{away_team_abbr}: {away_linescore['runs']} {home_team_abbr}: {home_linescore['runs']}'
+
+        overview_str = f'{inning_summation} | {score_summation}'
+
+        current_play = live_data['plays']['currentPlay']
+
+        count = current_play['count']
+        pitcher = current_play['matchup']['pitcher']['fullName']
+        batter = current_play['matchup']['batter']['fullName']
+
+        pitcher_str = f'P: {pitcher}'
+        batter_str = f'AB: {batter}'
+        count_str = f'COUNT: {count['balls']}-{count['strikes']}'
+        out_str = f'OUTS: {count['outs']}'
+
+        offense = linescore['offense']
+        runners_on = []
+        if 'first' in offense:
+          runners_on.append('1st')
+        if 'second' in offense:
+          runners_on.append('2nd')
+        if 'third' in offense:
+          runners_on.append('3rd')
+
+        runners_on_str = f'RUNNERS ON:'
+
+        if len(runners_on) == 0:
+          runners_on_str = f'{runners_on_str} NONE'
+        else:
+          runners_on_str = f'{runners_on_str} {', '.join(runners_on)}'
+
+        play_events = current_play['playEvents']
+        if len(play_events) == 0:
+          return
+
+        current_play_event = play_events[-1]
+        play_details = current_play_event['details']
+
+        if current_play_event['type'] != 'pitch':
+          final_str = """
+{overview_str}
+
+{description}
+----------------
+          """.format(overview_str=overview_str,description=play_details['description'])
+          await game_channel.send(final_str)
+        else:
+          play_id = current_play_event['playId']
+          if self.current_play_id != play_id:
+            self.current_play_id = play_id
+
+
+            pitch_data = current_play_event['pitchData']
+
+            current_pitch_str = None
+            if play_details['type'] is not None:
+              current_pitch_str = f'{pitch_data['startSpeed']} mph {play_details['type']['description']}'
+            
+            play_str = f'{play_details['description']}'
+
+            result_str = None
+            if 'result' in current_play:
+              if 'description' in current_play['result']:
+                result_str = current_play['result']['description']
+
+            if current_pitch_str is not None:
+              play_str = f'{current_pitch_str}; {play_str}'
+              if result_str is not None:
+                play_str = f'{play_str}\n{result_str}'
+
+            final_str = """
+{overview_str}
+
+{pitcher_str} | {batter_str}
+{count_str}, {out_str}
+{runners_on_str}
+
+{play_str}
+----------------
+            """.format(overview_str=overview_str, pitcher_str=pitcher_str, batter_str=batter_str, count_str=count_str, out_str=out_str, runners_on_str=runners_on_str, play_str=play_str)
+
+            await game_channel.send(final_str)
+
+  @commands.command(name='live', brief='Subscribes to a live game')
+  async def subscribe_to_game(self, ctx: commands.Context, team: str, date: str = None):
+    if team is None:
+      msg = 'Please provide a team by their common abbreviation to subscribe to a game'
+      log(msg, False)
+      await ctx.send(msg)
+    else:
+      # get game feed
+      # get teams abbr for channel name: <at_team>_vs_<home_team>-short-date_g<game_num_for_day>
+      # be smart in the future? maybe next step to this is to allow future games to be sub'd but need to figure out routines/timers
+
+      game_feed_response = await get_feed_request(team, date)
+
+      if game_feed_response['isOK'] == False:
+        log(game_feed_response['msg'], False)
+        await ctx.send(game_feed_response['msg'])
+      else:
+        games = game_feed_response['data']
+        number_of_games = len(games)
+        game_index = 0
+
+        if number_of_games == 0:
+          msg = f'No games found for {team}'
+          log(msg, False)
+          await ctx.send(msg)
+        else:
+          game = games[game_index]
+          game_suffix = None
+
+          if number_of_games == 2:
+            g1_status = games[0]['gameData']['status']['statusCode']
+            g2_status = games[1]['gameData']['status']['statusCode']
+
+            if g1_status == 'F' and g2_status == 'F':
+              msg = f'Both scheduled games for {team.upper()} are final.'
+              log(msg, False)
+              await ctx.send(msg)
+            else:
+              if g1_status == 'F':
+                game_index = 1
+                game = games[game_index]
+                game_suffix = 'g2'
+              else:
+                game_suffix = 'g1'
+
+          game_data = game['gameData']
+
+          game_date = game_data['datetime']['officialDate']
+          away_team_abbr = game_data['teams']['away']['abbreviation']
+          home_team_abbr = game_data['teams']['home']['abbreviation']
+
+          channel_name = f'{away_team_abbr.lower()}_vs_{home_team_abbr.lower()}_{game_date}'
+          if game_suffix is not None:
+            channel_name = f'{channel_name}_{game_suffix}'
+
+          overwrites = {
+            ctx.guild.get_member(self.bot.user.id): discord.PermissionOverwrite(read_messages=True),
+            ctx.author: discord.PermissionOverwrite(read_messages=True),
+            ctx.guild.default_role: discord.PermissionOverwrite(read_messages=True, )
+          }
+          category = discord.utils.get(ctx.guild.categories, name='dev')
+
+          existing_channel = discord.utils.get(ctx.guild.channels, name=channel_name)
+
+          game_channel_msg = None
+
+          if existing_channel is None:
+            game_channel = await ctx.guild.create_text_channel(name=channel_name, category=category, reason='Live subscription to game', overwrites=overwrites)
+            game_channel_msg = f'Created channel at {game_channel.mention} for the {away_team_abbr.upper()} vs. {home_team_abbr.upper()} game'
+            if game_suffix is not None:
+              created_channel_msg = f'{created_channel_msg} ({game_suffix.upper()})'
+          else:
+            game_channel = ctx.guild.get_channel(existing_channel.id)
+            game_channel_msg = f'Found existing channel for the {away_team_abbr.upper()} vs. {home_team_abbr.upper()} game: {game_channel.mention}'
+
+          await ctx.send(game_channel_msg)
+
+          # print(self.get_current_play.is_running())
+          if self.get_current_play.is_running() == False:
+            #ctx: commands.Context, channel_id: int, team: str, game_index: int = 0
+            self.get_current_play.start(ctx=ctx, channel_id=game_channel.id, team=team, game_index=game_index)
+
+  @commands.command(name='unsub', help='Unsubscribes from a game subscription')
+  async def unsubscribe_from_live_game(self, ctx: commands.Context, team: str):
+    if self.get_current_play.is_running() == True:
+      self.get_current_play.cancel()
+      await ctx.send(f'Unsubscribed from game for {team}')
+
+
 
 async def setup(bot):
   await bot.add_cog(MLB(bot))
