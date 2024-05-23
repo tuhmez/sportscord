@@ -752,8 +752,10 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
                 game_suffix = 'g1'
 
           game_data = game['gameData']
+          game_status = game_data['status']
+          game_datetime = game_data['datetime']
 
-          game_date = game_data['datetime']['officialDate']
+          game_date = game_datetime['officialDate']
           away_team_abbr = game_data['teams']['away']['abbreviation']
           home_team_abbr = game_data['teams']['home']['abbreviation']
 
@@ -778,6 +780,12 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
             game_channel_msg = f'Created channel at {game_channel.mention} for the {away_team_abbr.upper()} vs. {home_team_abbr.upper()} game'
             if game_suffix is not None:
               created_channel_msg = f'{created_channel_msg} ({game_suffix.upper()})'
+
+            matchup_graphic_response = await get_matchup_graphic_request(team, date)
+            if matchup_graphic_response['isOK'] == True:
+              matchup_graphic = matchup_graphic_response['data']
+              matchup_graphic.seek(0)
+              await game_channel.send(file=discord.File(matchup_graphic, f'{channel_name}.png'))
           else:
             game_channel = ctx.guild.get_channel(existing_channel.id)
             game_channel_msg = f'Found existing channel for the {away_team_abbr.upper()} vs. {home_team_abbr.upper()} game: {game_channel.mention}'
@@ -785,7 +793,17 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           await ctx.send(game_channel_msg)
 
           if channel_name not in self.running_tasks:
-            new_task = tasks.loop(seconds=10)(self.get_current_play)
+            new_task = None
+            if game_status['statusCode'] == 'S' or game_status['statusCode'] == 'P':
+              # need to test this out
+              game_time_utc = parser.isoparse(game_datetime['dateTime'])
+              game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
+              game_time_local_tz = game_time_utc.astimezone(self.to_zone)
+              datetime.datetime(hour=game_time_local_tz.hour, minute=game_time_local_tz.minute, tzinfo=self.to_zone)
+              start_time = [ datetime.time(hour=game_time_local_tz.hour, minute=game_time_local_tz.minute, tzinfo=self.to_zone) ]
+              new_task = tasks.loop(time=start_time)(self.get_current_play)
+            else:
+              new_task = tasks.loop(seconds=10)(self.get_current_play)
             self.running_tasks[channel_name] = new_task
             new_task.start(ctx=ctx, channel_id=game_channel.id, team=team, game_index=game_index)
 
@@ -821,8 +839,6 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
       
       channels_str = '\n'.join(mentions)
       await ctx.send(f'Active subscriptions:\n{channels_str}')
-
-
 
 async def setup(bot):
   await bot.add_cog(MLB(bot))
