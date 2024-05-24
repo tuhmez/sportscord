@@ -80,7 +80,6 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
               for game in jdata:
                 game_status = game['status']
                 game_status_code = game_status['codedGameState']
-                game_status_detail = game_status['detailedState']
 
                 linescore = game['linescore']
                 away_team = game['away']
@@ -95,7 +94,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
                   game_time_local_tz = game_time_utc.astimezone(self.to_zone)
                   game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%#I:%M %p")
                   game_time = game_time_local_tz if game_status['startTimeTBD'] == False else 'TBD'
-                  return_str = f'{game_status_detail} | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}'
+                  return_str = f'{away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}'
                 elif game_status_code == 'I':
                   inning_half = linescore['inningState']
                   inning = linescore['currentInningOrdinal']
@@ -334,7 +333,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
             game_time_local_tz = game_time_utc.astimezone(self.to_zone)
             game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%#I:%M %p")
             game_time = game_time_local_tz if game_status['startTimeTBD'] == False else 'TBD'
-            return_str = f'{game_status_detail} | {away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}'
+            return_str = f'{away_abbr} ({away_record}) vs. {home_abbr} ({home_record}) | {game_time}'
           elif game_status_code == 'I':
             linescore = game['linescore']
             inning_half = linescore['inningState']
