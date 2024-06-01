@@ -621,6 +621,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
 
         await game_channel.send(return_str)
         self.get_current_play.cancel()
+      elif game_status['statusCode'] == 'P' or game_status['statusCode'] == 'S':
+        return
       else:
         inning_top_bottom = linescore['inningHalf']
         inning_ordinal = linescore['currentInningOrdinal']
@@ -754,12 +756,27 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
                 game_suffix = 'g1'
 
           game_data = game['gameData']
-          game_status = game_data['status']
           game_datetime = game_data['datetime']
+          game_status = game_data['status']
 
           game_date = game_datetime['officialDate']
-          away_team_abbr = game_data['teams']['away']['abbreviation']
-          home_team_abbr = game_data['teams']['home']['abbreviation']
+
+          away_team = game_data['teams']['away']
+          home_team = game_data['teams']['home']
+
+          away_team_abbr = away_team['abbreviation']
+          home_team_abbr = home_team['abbreviation']
+          home_club_name = home_team['teamName'].lower().replace(' ', '-')
+          away_club_name = away_team['teamName'].lower().replace(' ', '-')
+
+          jdate = None
+          if date is not None:
+            jdate = get_datetime(date, 'json')
+            jdate['month'] = str(jdate['month']).rjust(2, '0')
+            jdate['day'] = str(jdate['day']).rjust(2, '0')
+          else:
+            today = datetime.date.today()
+            jdate = { 'month': str(today.month).rjust(2, '0'), 'day': str(today.day).rjust(2, '0'), 'year': today.year }
 
           channel_name = f'{away_team_abbr.lower()}_vs_{home_team_abbr.lower()}_{game_date}'
           if game_suffix is not None:
@@ -786,8 +803,25 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
             matchup_graphic_response = await get_matchup_graphic_request(team, date)
             if matchup_graphic_response['isOK'] == True:
               matchup_graphic = matchup_graphic_response['data']
+
+              title = f'{game_data['teams']['away']['name']} at {game_data['teams']['home']['name']}'
+              url = f'{ext_gameday_url}/{away_club_name}-vs-{home_club_name}/{jdate['year']}/{jdate['month']}/{jdate['day']}/{game['gamePk']}'
+              game_time_utc = parser.isoparse(game_datetime['dateTime'])
+              game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
+              game_time_local_tz = game_time_utc.astimezone(self.to_zone)
+              game_time_local_tz = datetime.datetime.strftime(game_time_local_tz, "%#I:%M %p")
+              game_time = game_time_local_tz if game_status['startTimeTBD'] == False else 'TBD'
+
+              home_record = f'{home_team['record']['leagueRecord']['wins']}-{home_team['record']['leagueRecord']['losses']}'
+              away_record = f'{away_team['record']['leagueRecord']['wins']}-{away_team['record']['leagueRecord']['losses']}'
+
+              description = f'{away_team_abbr} ({away_record}) vs. {home_team_abbr} ({home_record}) | {game_time}'
+              embed = discord.Embed(title=title, description=description, url=url)
+              embed.set_author(name='sportscord')
+              embed.set_image(url=f'attachment://{away_team_abbr.lower()}-vs-{home_team_abbr.lower()}.png')
+              embed.set_footer(text='Courtesy of Sports Stats API and MLB.')
               matchup_graphic.seek(0)
-              await game_channel.send(file=discord.File(matchup_graphic, f'{channel_name}.png'))
+              await game_channel.send(file=discord.File(matchup_graphic, f'{away_team_abbr.lower()}-vs-{home_team_abbr.lower()}.png'), embed=embed)
           else:
             game_channel = ctx.guild.get_channel(existing_channel.id)
             game_channel_msg = f'Found existing channel for the {away_team_abbr.upper()} vs. {home_team_abbr.upper()} game: {game_channel.mention}'
@@ -795,17 +829,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           await ctx.send(game_channel_msg)
 
           if channel_name not in self.running_tasks:
-            new_task = None
-            if game_status['statusCode'] == 'S' or game_status['statusCode'] == 'P':
-              # need to test this out
-              game_time_utc = parser.isoparse(game_datetime['dateTime'])
-              game_time_utc = game_time_utc.replace(tzinfo=self.from_utc_zone)
-              game_time_local_tz = game_time_utc.astimezone(self.to_zone)
-              datetime.datetime(hour=game_time_local_tz.hour, minute=game_time_local_tz.minute, tzinfo=self.to_zone)
-              start_time = [ datetime.time(hour=game_time_local_tz.hour, minute=game_time_local_tz.minute, tzinfo=self.to_zone) ]
-              new_task = tasks.loop(time=start_time)(self.get_current_play)
-            else:
-              new_task = tasks.loop(seconds=10)(self.get_current_play)
+            new_task = tasks.loop(seconds=10)(self.get_current_play)
             self.running_tasks[channel_name] = new_task
             new_task.start(ctx=ctx, channel_id=game_channel.id, team=team, game_index=game_index)
 
