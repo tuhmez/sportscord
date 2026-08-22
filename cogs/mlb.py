@@ -194,14 +194,20 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           other_teams.append(division['teamRecords'])
         other_teams_flat = list(chain(*other_teams))
 
-        other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat))
+        other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat)).sort(key=lambda x: x['losses'], reverse=True)
 
-        magic_num_str = f'MAGIC NUMBERS - {team.upper()}'
+        magic_num_str = f'MAGIC NUMBERS - {team.upper()}\n'
 
         for other_team in other_teams_filtered:
           other_team_abbr = other_team['team']['abbreviation']
-          magic_num = magic_number_formula(desired_teams_wins, other_team['wins'])
-          magic_num_str = f'{magic_num_str}\n\t - {other_team_abbr} - {magic_num}'
+          magic_num = magic_number_formula(desired_teams_wins, other_team['losses'])
+
+          num_str = magic_num
+          if magic_num < 0: 
+            num_str = 'ELIMINATED'
+          magic_num_str = f'{magic_num_str}\t - {other_team_abbr} - {num_str}'
+          if other_team != other_teams_filtered[-1]:
+            magic_num_str = f'{magic_num_str}\n'
 
         await ctx.send(magic_num_str)
       else:
