@@ -194,7 +194,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           other_teams.append(division['teamRecords'])
         other_teams_flat = list(chain(*other_teams))
 
-        other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat))
+        other_teams_filtered = list(set(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat)))
         other_teams_filtered.sort(key=lambda x: x['losses'], reverse=True)
 
         magic_num_str = f'MAGIC NUMBERS - {team.upper()}\n'
@@ -204,8 +204,6 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           other_team_abbr = other_team['team']['abbreviation']
           magic_num = magic_number_formula(desired_teams_wins, other_team['losses'])
 
-          if other_team_abbr.casefold() in magic_num_str:
-            continue;
           num_str = magic_num
           if magic_num < 0: 
             num_str = 'ELIMINATED'
