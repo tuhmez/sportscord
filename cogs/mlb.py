@@ -194,7 +194,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           other_teams.append(division['teamRecords'])
         other_teams_flat = list(chain(*other_teams))
 
-        other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat)).sort(key=lambda x: x['losses'], reverse=True)
+        other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat))
+        other_teams_filtered.sort(key=lambda x: x['losses'], reverse=True)
 
         magic_num_str = f'MAGIC NUMBERS - {team.upper()}\n'
 
