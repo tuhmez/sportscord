@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 import datetime
 from dateutil import parser, tz
+from itertools import chain
 
 from urls.mlb import boxscore_url, logo_url, ext_gameday_url
 from utils.mlb import get_ordinal, get_player_stats, get_probable_statline, translate_specific_type_to_general_type_for_standings, translate_long_division_to_abbreviation, get_playoff_standing_str
@@ -167,24 +168,54 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
         await ctx.send(standings_str)
   
   @commands.command(name='magic', brief='Gets the magic number for a team', help=magic_long_help)
-  async def get_magic_number(self, ctx: commands.Context, team: str, year: str = None):
+  async def get_magic_number(self, ctx: commands.Context, team: str, magic_type: str = None, year: str = None):
     magic_number_response = await get_magic_number_request(team, year)
+    magic_number_jdata = magic_number_response['data']
     if magic_number_response['isOK'] == False:
       log(magic_number_response['msg'], False)
       await ctx.send(magic_number_response['msg'])
     else:
-      magic_number_jdata = magic_number_response['data']
-      elimination_number = magic_number_jdata['eliminationNumber']
-      wc_elimination_number = magic_number_jdata['wildCardEliminationNumber']
+      is_magic_for_league = magic_type is not None and magic_type == "league"
+      if is_magic_for_league == True:
+        magic_number_response_for_league = await get_magic_number_request('', year)
+        league_jdata = magic_number_response_for_league['data']
+        desired_teams_league = magic_number_jdata['team']['league']['id']
+        desired_teams_id = magic_number_jdata['team']['id']
+        desired_teams_wins = magic_number_jdata['wins']
 
-      magic_num_str: str
+        magic_number_formula = lambda desired_team, other_team: 163 - desired_team - other_team
 
-      if 'magicNumber' in magic_number_jdata is not None:
-        magic_num_str = f'{team.upper()}\n**MAGIC NUMBER**: {magic_number_jdata["magicNumber"]}'
+
+        all_teams = league_jdata['records']
+        filtered_divisions = list(filter(lambda x: x['league']['id'] == desired_teams_league, all_teams))
+
+        other_teams = []
+        for division in filtered_divisions:
+          other_teams.append(division['teamRecords'])
+        other_teams_flat = list(chain(*other_teams))
+
+        other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat))
+
+        magic_num_str = f'MAGIC NUMBERS - {team.upper()}'
+
+        for other_team in other_teams_filtered:
+          other_team_abbr = other_team['team']['abbreviation']
+          magic_num = magic_number_formula(desired_teams_wins, other_team['wins'])
+          magic_num_str = f'{magic_num_str}\n\t - {other_team_abbr} - {magic_num}'
+
+        await ctx.send(magic_num_str)
       else:
-        magic_num_str = f'{team.upper()}\n**DIVISION ELIMINATION NUMBER**: {elimination_number}\n**WILD CARD ELIMINATION NUMBER**: {wc_elimination_number}'
+        elimination_number = magic_number_jdata['eliminationNumber']
+        wc_elimination_number = magic_number_jdata['wildCardEliminationNumber']
 
-      await ctx.send(magic_num_str)
+        magic_num_str: str
+
+        if 'magicNumber' in magic_number_jdata is not None:
+          magic_num_str = f'{team.upper()}\n**MAGIC NUMBER**: {magic_number_jdata["magicNumber"]}'
+        else:
+          magic_num_str = f'{team.upper()}\n**DIVISION ELIMINATION NUMBER**: {elimination_number}\n**WILD CARD ELIMINATION NUMBER**: {wc_elimination_number}'
+
+        await ctx.send(magic_num_str)
   
   @commands.command(name='probables', brief='Gets the pitching probables for a game', help=probables_long_help)
   async def get_probables(self, ctx: commands.Context, team: str, date: str = None):
