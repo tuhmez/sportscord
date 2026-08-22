@@ -192,8 +192,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
         other_teams = []
         for division in filtered_divisions:
           other_teams.append(division['teamRecords'])
-        print(f'extracted teams from divisions (pre-flat): {len(other_teams)}')
         other_teams_flat = list(chain(*other_teams))
+        print(f'extracted teams from divisions (flat): {len(other_teams_flat)}')
 
         other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat))
         other_teams_filtered.sort(key=lambda x: x['losses'], reverse=True)
