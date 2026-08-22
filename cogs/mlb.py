@@ -199,10 +199,13 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
 
         magic_num_str = f'MAGIC NUMBERS - {team.upper()}\n'
 
+        print(f'length of other_teams_filtered: {len(other_teams_filtered)}')
         for other_team in other_teams_filtered:
           other_team_abbr = other_team['team']['abbreviation']
           magic_num = magic_number_formula(desired_teams_wins, other_team['losses'])
 
+          if other_team_abbr.casefold() in magic_num_str:
+            continue;
           num_str = magic_num
           if magic_num < 0: 
             num_str = 'ELIMINATED'
