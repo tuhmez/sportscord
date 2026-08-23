@@ -182,33 +182,37 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
         desired_teams_league = magic_number_jdata['team']['league']['id']
         desired_teams_id = magic_number_jdata['team']['id']
         desired_teams_wins = magic_number_jdata['wins']
+        desired_teams_losses = magic_number_jdata['losses']
 
         magic_number_formula = lambda desired_team, other_team: 163 - desired_team - other_team
-
 
         all_teams = league_jdata['records']
         filtered_divisions = list(filter(lambda x: x['league']['id'] == desired_teams_league, all_teams))
 
         other_teams = []
         for division in filtered_divisions:
-          other_teams.append(division['teamRecords'])
+          if division['standingsType'] == 'regularSeason':
+            other_teams.append(division['teamRecords'])
         other_teams_flat = list(chain(*other_teams))
-        print(f'extracted teams from divisions (flat): {len(other_teams_flat)}')
 
         other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat))
         other_teams_filtered.sort(key=lambda x: x['losses'], reverse=True)
 
         magic_num_str = f'MAGIC NUMBERS - {team.upper()}\n'
 
-        print(f'length of other_teams_filtered: {len(other_teams_filtered)}')
         for other_team in other_teams_filtered:
           other_team_abbr = other_team['team']['abbreviation']
-          magic_num = magic_number_formula(desired_teams_wins, other_team['losses'])
+          other_teams_wins = other_team['wins']
+          other_teams_losses = other_team['losses']
+
+          higher_wins = desired_teams_wins if desired_teams_wins >= other_teams_wins else other_teams_wins
+          higher_losses = other_teams_losses if desired_teams_losses <= other_teams_losses else desired_teams_losses
+          magic_num = magic_number_formula(higher_wins, higher_losses)
 
           num_str = magic_num
           if magic_num < 0: 
             num_str = 'ELIMINATED'
-          magic_num_str = f'{magic_num_str}\t - {other_team_abbr} - {num_str}'
+          magic_num_str = f'{magic_num_str} - {other_team_abbr} - {num_str}'
           if other_team != other_teams_filtered[-1]:
             magic_num_str = f'{magic_num_str}\n'
 
