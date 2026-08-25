@@ -198,25 +198,29 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
         other_teams_filtered = list(filter(lambda x: x['team']['id'] != desired_teams_id, other_teams_flat))
         other_teams_filtered.sort(key=lambda x: x['losses'], reverse=True)
 
-        magic_num_str = f'MAGIC NUMBERS - {team.upper()}\n'
-
+        magic_num_str = f'MAGIC NUMBERS - {team.upper()}'
+        magic_nums = [magic_num_str]
         for other_team in other_teams_filtered:
           other_team_abbr = other_team['team']['abbreviation']
           other_teams_wins = other_team['wins']
           other_teams_losses = other_team['losses']
 
-          higher_wins = desired_teams_wins if desired_teams_wins >= other_teams_wins else other_teams_wins
-          higher_losses = other_teams_losses if desired_teams_losses <= other_teams_losses else desired_teams_losses
+          desired_team_has_higher_wins = desired_teams_wins >= other_teams_wins
+
+          higher_wins = desired_teams_wins if desired_team_has_higher_wins else other_teams_wins
+          higher_losses = other_teams_losses if desired_team_has_higher_wins else desired_teams_losses
           magic_num = magic_number_formula(higher_wins, higher_losses)
 
           num_str = magic_num
           if magic_num < 0: 
             num_str = 'ELIMINATED'
-          magic_num_str = f'{magic_num_str} - {other_team_abbr} - {num_str}'
-          if other_team != other_teams_filtered[-1]:
-            magic_num_str = f'{magic_num_str}\n'
+          else:
+            if desired_team_has_higher_wins == False:
+              num_str = f'({num_str})'
+          magic_num_str = f'- {other_team_abbr} - {num_str}'
+          magic_nums.append(magic_num_str)
 
-        await ctx.send(magic_num_str)
+        await ctx.send("\n".join(magic_nums))
       else:
         elimination_number = magic_number_jdata['eliminationNumber']
         wc_elimination_number = magic_number_jdata['wildCardEliminationNumber']
