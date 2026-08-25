@@ -175,8 +175,8 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
       log(magic_number_response['msg'], False)
       await ctx.send(magic_number_response['msg'])
     else:
-      is_magic_for_league = magic_type is not None and magic_type == "league"
-      if is_magic_for_league == True:
+      is_magic_for_team_against_others = magic_type is not None and (magic_type == 'league' or magic_type == 'division')
+      if is_magic_for_team_against_others == True:
         magic_number_response_for_league = await get_magic_number_request('', year)
         league_jdata = magic_number_response_for_league['data']
         desired_teams_league = magic_number_jdata['team']['league']['id']
@@ -188,6 +188,10 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
 
         all_teams = league_jdata['records']
         filtered_divisions = list(filter(lambda x: x['league']['id'] == desired_teams_league, all_teams))
+
+        if magic_type == 'division':
+          desired_teams_division = magic_number_jdata['team']['division']['id']
+          filtered_divisions = list(filter(lambda x: x['division']['id'] == desired_teams_division, filtered_divisions))
 
         other_teams = []
         for division in filtered_divisions:

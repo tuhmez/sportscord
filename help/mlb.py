@@ -39,7 +39,7 @@ If no year is specified, it will default to the current year
 
 <input_team> - Must be team abbreviation; ex. MIL (case-insensitive)
 
-[magic_type] - Optional, will return single magic number or magic number with respect to other teams; "league" or "team"
+[magic_type] - Optional, will return single magic number or magic number with respect to other teams; "league" or "division"
 [year] - Optional, must be in yyyy format (ex. 2022)
 
 Examples:
