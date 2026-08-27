@@ -216,7 +216,7 @@ class MLB(commands.Cog, name='mlb', command_attrs=dict(hidden=False)):
           magic_num = magic_number_formula(higher_wins, higher_losses)
 
           num_str = magic_num
-          if magic_num < 0: 
+          if magic_num <= 0: 
             num_str = 'ELIMINATED'
           else:
             if desired_team_has_higher_wins == False:
